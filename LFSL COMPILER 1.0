@@ -1,0 +1,84 @@
+#!/usr/bin/env python3
+# LFSL Compiler v1.0
+# Converts LFSL sigils into executable semantic trees.
+
+import re
+import json
+from .validator import validate_sigil
+from .sigil_engine import (
+    detect_sigil_type,
+    evaluate_seed,
+    evaluate_path,
+    evaluate_mirror,
+    evaluate_fractal,
+    evaluate_pulse
+)
+
+SIGIL_FRAME_PATTERN = re.compile(r"^([^\n]+)\n(.*)$", re.DOTALL)
+
+def compile_lfsl(text):
+    """
+    Compile LFSL symbolic text into a semantic JSON structure.
+    Steps:
+      - Parse frame
+      - Identify sigil type
+      - Validate structure
+      - Delegate to type evaluator
+      - Build canonical output
+    """
+    match = SIGIL_FRAME_PATTERN.match(text.strip())
+    if not match:
+        raise ValueError("LFSL: Missing or invalid sigil frame.")
+
+    frame = match.group(1).strip()
+    body  = match.group(2).strip()
+
+    # STEP 1: Identify sigil type
+    sigil_type = detect_sigil_type(frame)
+
+    # STEP 2: Validate sigil structure + operators
+    validation = validate_sigil(sigil_type, frame, body)
+    if not validation["valid"]:
+        raise ValueError(f"SIGIL_INVALID: {validation['error']}")
+
+    # STEP 3: Delegate to correct evaluator
+    if sigil_type == "seed":
+        result = evaluate_seed(frame, body)
+
+    elif sigil_type == "path":
+        result = evaluate_path(frame, body)
+
+    elif sigil_type == "mirror":
+        result = evaluate_mirror(frame, body)
+
+    elif sigil_type == "fractal":
+        result = evaluate_fractal(frame, body)
+
+    elif sigil_type == "pulse":
+        result = evaluate_pulse(frame, body)
+
+    else:
+        raise ValueError(f"Unknown sigil type: {sigil_type}")
+
+    # STEP 4: Add metadata
+    result["meta"] = {
+        "lfsl_version": "0.2",
+        "compiler_version": "1.0"
+    }
+
+    return result
+
+
+if __name__ == "__main__":
+    import sys
+    if len(sys.argv) < 2:
+        print("Usage: compiler_v1.py <file.lfsl>")
+        sys.exit(1)
+
+    path = sys.argv[1]
+    with open(path, "r", encoding="utf-8") as f:
+        text = f.read()
+
+    compiled = compile_lfsl(text)
+    print(json.dumps(compiled, indent=2, ensure_ascii=False))
+
